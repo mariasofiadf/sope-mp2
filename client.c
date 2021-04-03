@@ -24,19 +24,13 @@ int load_args(int argc, char** argv){
         return 1;
     }
     nsecs = atoi(argv[1]);
-    fifoname = malloc(sizeof(argv[2]));
-    fifoname = argv[2];
+    fifoname = malloc(sizeof(argv[3]));
+    fifoname = argv[3];
     return 0;
 }
 
 void free_vars(){
     //free(fifoname);
-}
-
-
-void create_public_fifo(){
-    sprintf(myfifo,"/tmp/%s", fifoname);
-    mkfifo(myfifo, 0666);
 }
 
 void setup_public_fifo(){
@@ -45,6 +39,11 @@ void setup_public_fifo(){
 
 void send_request(int i, int t){
     int fd = open(fifoname, O_WRONLY);
+    if(fd == -1)
+    {
+        fprintf(stderr, "Error opening public fifo!");
+        return;
+    }
     //i t pid tid res
     char str[100]; sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
     printf("Request sent: %s\n", str);
@@ -55,7 +54,14 @@ void send_request(int i, int t){
 int get_response(){
     char response_fifo[100];
     sprintf(response_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
+    //sprintf(response_fifo, "/tmp/door");
+    printf("response_fifo: %", response_fifo);
     int fd2 = open(fifoname, O_RDONLY);
+    if(fd2 == -1)
+    {
+        fprintf(stderr, "Error opening private fifo!");
+        return 1;
+    }
     //i t pid tid res
     char str[100];
     read(fd2, str, sizeof(str));
@@ -81,9 +87,9 @@ int main(int argc, char**argv){
         return 1;
 
     srand(time(NULL));   // Initialization of random function, should only be called once.
-    
+
     //create_public_fifo();
-    //setup_public_fifo();
+    setup_public_fifo();
     send_request(0, 3);
     int response = get_response();
 
