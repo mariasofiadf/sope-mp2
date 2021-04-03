@@ -12,6 +12,7 @@
 int nsecs;
 char* fifoname;
 char myfifo[20];
+char priv_fifo[100];
 
 
 int load_args(int argc, char** argv){
@@ -35,38 +36,49 @@ void free_vars(){
 
 void setup_public_fifo(){
     sprintf(myfifo,"%s", fifoname);
+    //mkfifo(myfifo, 0666);
+}
+
+void setup_priv_fifo(){
+    sprintf(priv_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
+    mkfifo(priv_fifo, 0666);
 }
 
 void send_request(int i, int t){
     int fd = open(fifoname, O_WRONLY);
+
+    int debug = open("debug", O_WRONLY);
     if(fd == -1)
     {
         fprintf(stderr, "Error opening public fifo!");
         return;
     }
     //i t pid tid res
-    char str[100]; sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
+    char str[30];
+    sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
     printf("Request sent: %s\n", str);
-    write(fd, str, sizeof(str));
+    write(fd, str, strlen(str));
     close(fd);
+    write(debug, str, strlen(str));
+    close(debug);
 }
 
+
 int get_response(){
-    char response_fifo[100];
-    sprintf(response_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
-    //sprintf(response_fifo, "/tmp/door");
-    printf("response_fifo: %", response_fifo);
-    int fd2 = open(fifoname, O_RDONLY);
+    int fd2 = open(priv_fifo, O_RDONLY);
     if(fd2 == -1)
     {
         fprintf(stderr, "Error opening private fifo!");
         return 1;
     }
     //i t pid tid res
+    printf("getting response\n");
     char str[100];
     read(fd2, str, sizeof(str));
     printf("Response: %s\n", str);
     close(fd2);
+
+    printf("got response\n");
     return 1;
 }
 
@@ -90,7 +102,9 @@ int main(int argc, char**argv){
 
     //create_public_fifo();
     setup_public_fifo();
-    send_request(0, 3);
+    setup_priv_fifo();
+    send_request(0, 1);
+    //usleep(100);
     int response = get_response();
 
     /*
