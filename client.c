@@ -6,7 +6,8 @@
 #include <unistd.h>
 #include <fcntl.h> 
 #include <sys/stat.h> 
-#define NTHREADS 1
+#include <string.h>
+#define NTHREADS 10
 
 int nsecs;
 char* fifoname;
@@ -14,8 +15,12 @@ char myfifo[20];
 
 
 int load_args(int argc, char** argv){
-    if(argc != 3){
+    if(argc != 4){
         fprintf(stderr,"Wrong number of arguments!");
+        return 1;
+    }
+    if(strcmp(argv[1], "-t")){
+        fprintf(stderr, "Wrong argument");
         return 1;
     }
     nsecs = atoi(argv[1]);
@@ -33,13 +38,30 @@ void create_public_fifo(){
     sprintf(myfifo,"/tmp/%s", fifoname);
     mkfifo(myfifo, 0666);
 }
+
+void setup_public_fifo(){
+    sprintf(myfifo,"%s", fifoname);
+}
+
 void send_request(int i, int t){
-    int fd = open(myfifo, O_WRONLY);
+    int fd = open(fifoname, O_WRONLY);
     //i t pid tid res
     char str[100]; sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
-    printf("%s", str);
-    //write(fd, "Hello", sizeof("Hello"));
+    printf("Request sent: %s\n", str);
+    write(fd, str, sizeof(str));
     close(fd);
+}
+
+int get_response(){
+    char response_fifo[100];
+    sprintf(response_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
+    int fd2 = open(fifoname, O_RDONLY);
+    //i t pid tid res
+    char str[100];
+    read(fd2, str, sizeof(str));
+    printf("Response: %s\n", str);
+    close(fd2);
+    return 1;
 }
 
 
@@ -60,8 +82,10 @@ int main(int argc, char**argv){
 
     srand(time(NULL));   // Initialization of random function, should only be called once.
     
-    create_public_fifo();
-    send_request(0, 1);
+    //create_public_fifo();
+    //setup_public_fifo();
+    send_request(0, 3);
+    int response = get_response();
 
     /*
     int i;	// thread counter
@@ -73,6 +97,7 @@ int main(int argc, char**argv){
 	for(i=0; i<NTHREADS; i++) {
 		if (pthread_create(&ids[i], NULL, task_request, &i) != 0)
 			exit(-1);	// here, we decided to end process
+        usleep(10);
 	}
 	// wait for finishing of created threads
     void *__thread_return; int *retVal;
