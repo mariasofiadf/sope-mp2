@@ -12,7 +12,7 @@
 
 int nsecs;
 char * public_fifo;
-char * priv_fifos[10];
+char * priv_fifos[NTHREADS];
 
 sem_t sem_req, sem_resp;
 
@@ -113,12 +113,12 @@ int main(int argc, char**argv){
         usleep(20);
 	}
 	// wait for finishing of created threads
-    void *__thread_return; int *retVal;
+   /* void *__thread_return; int *retVal;
 	for(i=0; i<NTHREADS; i++) {
 		pthread_join(ids[i], &__thread_return);	// Note: threads give no termination code
 		retVal =  __thread_return;
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
-	}
+	}*/
 
 	pthread_exit(NULL);	// here, not really necessary...
     return 0;
