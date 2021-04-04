@@ -12,7 +12,7 @@
 
 int nsecs;
 char * public_fifo;
-char * priv_fifo;
+char * priv_fifos[10];
 
 sem_t sem_req, sem_resp;
 
@@ -36,10 +36,10 @@ void free_vars(){
 }
 
 
-void setup_priv_fifo(){
-    priv_fifo = malloc(30);
-    sprintf(priv_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
-    mkfifo(priv_fifo, 0666);
+void setup_priv_fifo(int i){
+    priv_fifos[i] = malloc(30);
+    sprintf(priv_fifos[i], "/tmp/%d.%ld", getpid(), pthread_self());
+    mkfifo(priv_fifos[i], 0666);
 }
 
 void send_request(int i, int t){
@@ -62,18 +62,18 @@ void send_request(int i, int t){
 }
 
 
-int get_response(){
-    sem_wait(&sem_resp);
+int get_response(int i){
+    //sem_wait(&sem_resp);
     int fd2;
-    printf("opening\n");
-    while ((fd2 = open(priv_fifo,O_RDONLY))< 0);
+    printf("i: %d\npriv_fifo: %s\n",i, priv_fifos[i]);
+    while ((fd2 = open(priv_fifos[i],O_RDONLY))< 0);
     //i t pid tid res
-    printf("getting response\n");
+    return 0;
     char str[100];
     read(fd2, str, sizeof(str));
     printf("Response: %s\n", str);
     close(fd2);
-    sem_post(&sem_resp);
+    //sem_post(&sem_resp);
     return 1;
 }
 
@@ -83,10 +83,10 @@ void *task_request(void *a) {
     *i = *(int*)a;
     int* r = malloc(sizeof(int));
     *r = rand()%9 + 1;
-    setup_priv_fifo();
+    setup_priv_fifo(*i);
 	printf("In thread PID: %d ; TID: %lu ; Request: %d\n", getpid(), (unsigned long) pthread_self(), *i);
     send_request(*i,*r);
-    get_response();
+    get_response(*i);
 	pthread_exit(a);	// no termination code
 }
 
@@ -99,9 +99,6 @@ int main(int argc, char**argv){
         return 1;
 
     srand(time(NULL));   // Initialization of random function, should only be called once.
-
-    setup_priv_fifo();
-
 
 
     int i;	// thread counter
@@ -120,7 +117,7 @@ int main(int argc, char**argv){
 	for(i=0; i<NTHREADS; i++) {
 		pthread_join(ids[i], &__thread_return);	// Note: threads give no termination code
 		retVal =  __thread_return;
-		printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
+		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
 
 	pthread_exit(NULL);	// here, not really necessary...
