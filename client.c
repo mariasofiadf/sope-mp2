@@ -42,6 +42,11 @@ void setup_priv_fifo(int i){
     mkfifo(priv_fifos[i], 0666);
 }
 
+
+void delete_priv_fifo(int i){
+    remove(priv_fifos[i]);
+}
+
 void send_request(int i, int t){
 
     sem_wait(&sem_req);
@@ -87,6 +92,8 @@ void *task_request(void *a) {
 	printf("In thread PID: %d ; TID: %lu ; Request: %d\n", getpid(), (unsigned long) pthread_self(), *i);
     send_request(*i,*r);
     get_response(*i);
+    delete_priv_fifo(*i);
+    usleep(30);
 	pthread_exit(a);	// no termination code
 }
 
@@ -113,12 +120,12 @@ int main(int argc, char**argv){
         usleep(20);
 	}
 	// wait for finishing of created threads
-   /* void *__thread_return; int *retVal;
+    void *__thread_return; int *retVal;
 	for(i=0; i<NTHREADS; i++) {
 		pthread_join(ids[i], &__thread_return);	// Note: threads give no termination code
 		retVal =  __thread_return;
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
-	}*/
+	}
 
 	pthread_exit(NULL);	// here, not really necessary...
     return 0;
