@@ -4,7 +4,7 @@ s: server.o lib.o delay.c delay.h
 	gcc -Wall -DDELAY=0 -o s delay.c lib.o server.o -pthread
 
 c: client.c
-	gcc -Wall -o c client.c -pthread
+	gcc -Wall -o c client.c -lpthread -lrt
 
 t: test.c
 	gcc -Wall -o t test.c -pthread

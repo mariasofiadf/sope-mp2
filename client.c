@@ -7,13 +7,14 @@
 #include <fcntl.h> 
 #include <sys/stat.h> 
 #include <string.h>
+#include <semaphore.h>
 #define NTHREADS 10
 
 int nsecs;
-char* fifoname;
-char myfifo[20];
-char priv_fifo[100];
+char * public_fifo;
+char * priv_fifo;
 
+sem_t sem_req, sem_resp;
 
 int load_args(int argc, char** argv){
     if(argc != 4){
@@ -25,8 +26,8 @@ int load_args(int argc, char** argv){
         return 1;
     }
     nsecs = atoi(argv[1]);
-    fifoname = malloc(sizeof(argv[3]));
-    fifoname = argv[3];
+    public_fifo = malloc(sizeof(argv[3]));
+    public_fifo = argv[3];
     return 0;
 }
 
@@ -34,51 +35,45 @@ void free_vars(){
     //free(fifoname);
 }
 
-void setup_public_fifo(){
-    sprintf(myfifo,"%s", fifoname);
-    //mkfifo(myfifo, 0666);
-}
 
 void setup_priv_fifo(){
+    priv_fifo = malloc(30);
     sprintf(priv_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
     mkfifo(priv_fifo, 0666);
 }
 
 void send_request(int i, int t){
-    int fd = open(fifoname, O_WRONLY);
 
-    int debug = open("debug", O_WRONLY);
-    if(fd == -1)
-    {
-        fprintf(stderr, "Error opening public fifo!");
-        return;
-    }
+    sem_wait(&sem_req);
+    int fd;
+    int debug = open("debug", O_WRONLY | O_APPEND);
+    while((fd = open(public_fifo, O_WRONLY)) < 0);
+
     //i t pid tid res
     char str[30];
     sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
-    printf("Request sent: %s\n", str);
+    printf("Request sent: %s", str);
     write(fd, str, strlen(str));
     close(fd);
     write(debug, str, strlen(str));
     close(debug);
+
+    sem_post(&sem_req);
 }
 
 
 int get_response(){
-    int fd2 = open(priv_fifo, O_RDONLY);
-    if(fd2 == -1)
-    {
-        fprintf(stderr, "Error opening private fifo!");
-        return 1;
-    }
+    sem_wait(&sem_resp);
+    int fd2;
+    printf("opening\n");
+    while ((fd2 = open(priv_fifo,O_RDONLY))< 0);
     //i t pid tid res
     printf("getting response\n");
     char str[100];
     read(fd2, str, sizeof(str));
     printf("Response: %s\n", str);
     close(fd2);
-
-    printf("got response\n");
+    sem_post(&sem_resp);
     return 1;
 }
 
@@ -88,26 +83,27 @@ void *task_request(void *a) {
     *i = *(int*)a;
     int* r = malloc(sizeof(int));
     *r = rand()%9 + 1;
-	printf("In thread PID: %d ; TID: %lu. ; Request: %d\n", getpid(), (unsigned long) pthread_self(), *i);
-    //send_request(*i,*r);
+    setup_priv_fifo();
+	printf("In thread PID: %d ; TID: %lu ; Request: %d\n", getpid(), (unsigned long) pthread_self(), *i);
+    send_request(*i,*r);
+    get_response();
 	pthread_exit(a);	// no termination code
 }
 
 int main(int argc, char**argv){
+
+    sem_init(&sem_req,0,1);
+    sem_init(&sem_resp,0,1);
 
     if(load_args(argc,argv))
         return 1;
 
     srand(time(NULL));   // Initialization of random function, should only be called once.
 
-    //create_public_fifo();
-    setup_public_fifo();
     setup_priv_fifo();
-    send_request(0, 1);
-    //usleep(100);
-    int response = get_response();
 
-    /*
+
+
     int i;	// thread counter
 	pthread_t ids[NTHREADS];	// storage of (system) Thread Identifiers
 
@@ -117,7 +113,7 @@ int main(int argc, char**argv){
 	for(i=0; i<NTHREADS; i++) {
 		if (pthread_create(&ids[i], NULL, task_request, &i) != 0)
 			exit(-1);	// here, we decided to end process
-        usleep(10);
+        usleep(20);
 	}
 	// wait for finishing of created threads
     void *__thread_return; int *retVal;
@@ -128,7 +124,6 @@ int main(int argc, char**argv){
 	}
 
 	pthread_exit(NULL);	// here, not really necessary...
-    */
     return 0;
 
 }
