@@ -8,7 +8,7 @@
 #include <sys/stat.h> 
 #include <string.h>
 #include <semaphore.h>
-#define NTHREADS 10
+#define NTHREADS 1
 
 int nsecs;
 char * public_fifo;
@@ -31,8 +31,32 @@ int load_args(int argc, char** argv){
     return 0;
 }
 
-void free_vars(){
-    //free(fifoname);
+enum oper{
+    IWANT,
+    GOTRS,
+    CLOSD,
+    GAVUP
+};
+
+void register_op(int i, int t, enum oper oper){
+    printf("%ld ; %d ; %d ; %d ; %ld ; %d", time(NULL), i, t, getpid(), pthread_self(), -1);
+    switch (oper)
+    {
+    case IWANT:
+        printf(" ; IWANT \n");
+        break;
+    case GOTRS:
+        printf(" ; GOTRS \n");
+        break;
+    case CLOSD:
+        printf(" ; CLOSD \n");
+        break;
+    case GAVUP:
+        printf(" ; GAVUP \n");
+        break;
+    default:
+        break;
+    }
 }
 
 
@@ -48,7 +72,7 @@ void delete_priv_fifo(int i){
 }
 
 void send_request(int i, int t){
-
+    register_op(i, t, IWANT);
     sem_wait(&sem_req);
     int fd;
     int debug = open("debug", O_WRONLY | O_APPEND);
@@ -57,7 +81,6 @@ void send_request(int i, int t){
     //i t pid tid res
     char str[30];
     sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
-    printf("Request sent: %s", str);
     write(fd, str, strlen(str));
     close(fd);
     write(debug, str, strlen(str));
@@ -89,12 +112,11 @@ void *task_request(void *a) {
     int* r = malloc(sizeof(int));
     *r = rand()%9 + 1;
     setup_priv_fifo(*i);
-	printf("In thread PID: %d ; TID: %lu ; Request: %d\n", getpid(), (unsigned long) pthread_self(), *i);
-    send_request(*i,*r);
+	send_request(*i,*r);
     get_response(*i);
     delete_priv_fifo(*i);
     usleep(30);
-	pthread_exit(a);	// no termination code
+	pthread_exit(a);
 }
 
 int main(int argc, char**argv){
@@ -107,11 +129,8 @@ int main(int argc, char**argv){
 
     srand(time(NULL));   // Initialization of random function, should only be called once.
 
-
     int i;	// thread counter
 	pthread_t ids[NTHREADS];	// storage of (system) Thread Identifiers
-
-	printf("\nMain thread PID: %d ; TID: %lu.\n", getpid(), (unsigned long) pthread_self());
 
 	// new threads creation
 	for(i=0; i<NTHREADS; i++) {
