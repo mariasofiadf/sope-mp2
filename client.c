@@ -16,6 +16,14 @@ char * priv_fifos[NTHREADS];
 
 sem_t sem_req, sem_resp;
 
+struct message{
+    int i;
+    int t;
+    pid_t pid;
+    pthread_t tid;
+    int res;
+};
+
 int load_args(int argc, char** argv){
     if(argc != 4){
         fprintf(stderr,"Wrong number of arguments!");
@@ -79,11 +87,17 @@ void send_request(int i, int t){
     while((fd = open(public_fifo, O_WRONLY)) < 0);
 
     //i t pid tid res
-    char str[30];
-    sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
-    write(fd, str, strlen(str));
+    //char str[30];
+    //sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
+    struct message msg;
+    msg.i = i;
+    msg.t = t;
+    msg.pid = getpid();
+    msg.tid = pthread_self();
+    msg.res = -1;
+    write(fd, &msg, sizeof(msg));
     close(fd);
-    write(debug, str, strlen(str));
+    write(debug, &msg, sizeof(msg));
     close(debug);
 
     sem_post(&sem_req);
@@ -93,13 +107,12 @@ void send_request(int i, int t){
 int get_response(int i){
     //sem_wait(&sem_resp);
     int fd2;
-    printf("i: %d\npriv_fifo: %s\n",i, priv_fifos[i]);
+    //printf("i: %d\npriv_fifo: %s\n",i, priv_fifos[i]);
     while ((fd2 = open(priv_fifos[i],O_RDONLY))< 0);
     //i t pid tid res
     return 0;
-    char str[100];
-    read(fd2, str, sizeof(str));
-    printf("Response: %s\n", str);
+    struct message msg;
+    read(fd2, &msg, sizeof(msg));
     close(fd2);
     //sem_post(&sem_resp);
     return 1;
