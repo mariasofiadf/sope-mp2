@@ -9,29 +9,61 @@
 #include <string.h>
 #include <semaphore.h>
 
-#define MILLION 2000000
+#define MILLION 1000000
 
+/**
+ * @brief dynamically allocated
+ * 
+ */
 char * public_fifo;
-//priv_fifos array will be dynamically allocated based on expected number of threads
+
+
+/**
+ * @brief dynamically allocated based on expected number of threads
+ * 
+ */
 char ** priv_fifos;
 
+/**
+ * @brief time at which the main thread will stop creating producing threads
+ * 
+ * @see time_is_up
+ */
 time_t time_end;
+
+/**
+ * @brief number of seconds that the main thread will create producing threads
+ * 
+ */
 int nsecs;
 
+/**
+ * @brief total number of task requests (producing threads)
+ * 
+ */
 int task_count = 0;
 
-sem_t sem, sem_time;
+/**
+ * @brief semaphore used for critacal regions
+ * 
+ */
+sem_t sem;
 
 /**
  * @brief Structure to be using to communicate via FIFOs
  * 
  */
 struct message {
-	int rid;	// request id
-	pid_t pid;	// process id
-	pthread_t tid;	// thread id
-	int tskload;	// task load
-	int tskres;	// task result
+    /** @brief request id */
+	int rid;	    
+    /** @brief process id */
+	pid_t pid;      
+    /** @brief thread id */
+	pthread_t tid;	
+    /** @brief task load */
+	int tskload;	
+    /** @brief task result */
+	int tskres;	    
 };
 
 /**
@@ -58,6 +90,9 @@ void print_usage(){
  * 
  * @param argc 
  * @param argv 
+ * @see nsecs
+ * @see time_end
+ * @see public_fifo
  * @return int Returns 0, if successful and 1 otherwise
  */
 int load_args(int argc, char** argv){
@@ -120,6 +155,8 @@ void register_op(int i, int t, int res, enum oper oper){
  * 
  * @param i universal unique request number
  * 
+ * @see priv_fifos
+ * 
  * @note this function allocates memory for every new fifo
  */
 void setup_priv_fifo(int i){
@@ -150,9 +187,6 @@ void delete_priv_fifo(int i){
  */
 void send_request(int i, int t){
 
-    //wait to enter
-    //sem_wait(&sem_req);
-
     //waits for fifo to be opened on the other end
     int fd;
     while((fd = open(public_fifo, O_WRONLY)) < 0);
@@ -170,45 +204,51 @@ void send_request(int i, int t){
     close(fd);
 
     register_op(i, t, -1, IWANT);
-
-    //wake up next thread
-    //sem_post(&sem_req);
-
 }
 
-
+/**
+ * @brief Get the response from the private fifo at index i of priv_fifos
+ * 
+ * @param i 
+ * @see priv_fifos
+ * @return int Returns 0 if successful, 1 othewise
+ */
 int get_response(int i){
-
-    //sem_wait(&sem_req);
 
     //waits for fifo to be opened on the other end
     int fd2;
-
     while ((fd2 = open(priv_fifos[i],O_RDONLY))< 0);
 
     //message struct is created and filled with the information received
     struct message msg;
     int r = read(fd2, &msg, sizeof(msg));
-    if(r == 0)
-    {
-        fprintf(stderr, "FIFO empty!\n");
+    if(r == 0){
+        fprintf(stderr, "Error: EOF\n");
         close(fd2);
         return 1;
     }
+
     //this end of the fifo is closed
     close(fd2);
 
     register_op(i,msg.tskload,msg.tskres,GOTRS);
-    //sem_post(&sem_req);
+
     return 0;
 }
 
-
-void *task_request(void *a) {
+/**
+ * @brief Thread function
+ * 
+ * @param a 
+ */
+void *producer_thread(void *a) {
+    //waits to enter
     sem_wait(&sem);
-    int id = task_count;
-    task_count++;
 
+    //gets unniversal request number
+    int id = task_count++;
+
+    //generates random task weight
     int r = rand()%9 + 1;
 
     setup_priv_fifo(id);
@@ -221,7 +261,9 @@ void *task_request(void *a) {
 
     delete_priv_fifo(id);
     
+    //wakes up next thread
     sem_post(&sem);
+
 	pthread_exit(a);
 }
 
@@ -236,7 +278,6 @@ int time_is_up(){
 int main(int argc, char**argv){
 
     sem_init(&sem,0,1);
-    sem_init(&sem_time,0,1);
 
     if(load_args(argc,argv))
         return 1;
@@ -255,7 +296,7 @@ int main(int argc, char**argv){
     while(!time_is_up()){
         if(server_is_open()){
             //ignoring possible errors in thread creation
-            int pt = pthread_create(&ids[i], NULL, task_request, NULL);
+            pthread_create(&ids[i], NULL, producer_thread, NULL);
             i++;
             usleep(rand()%50+50);
         }
