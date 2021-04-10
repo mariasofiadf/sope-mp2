@@ -16,12 +16,12 @@ char * priv_fifos[NTHREADS];
 
 sem_t sem_req, sem_resp;
 
-struct message{
-    int i;
-    int t;
-    pid_t pid;
-    pthread_t tid;
-    int res;
+struct message {
+	int rid;	// request id
+	pid_t pid;	// process id
+	pthread_t tid;	// thread id
+	int tskload;	// task load
+	int tskres;	// task result
 };
 
 int load_args(int argc, char** argv){
@@ -86,15 +86,12 @@ void send_request(int i, int t){
     int debug = open("debug", O_WRONLY | O_APPEND);
     while((fd = open(public_fifo, O_WRONLY)) < 0);
 
-    //i t pid tid res
-    //char str[30];
-    //sprintf(str, "%d %d %d %ld %d\n", i, t, getpid(), pthread_self(), -1);
     struct message msg;
-    msg.i = i;
-    msg.t = t;
+    msg.rid = i;
+    msg.tskload = t;
     msg.pid = getpid();
     msg.tid = pthread_self();
-    msg.res = -1;
+    msg.tskres = -1;
     write(fd, &msg, sizeof(msg));
     close(fd);
     write(debug, &msg, sizeof(msg));
@@ -107,7 +104,6 @@ void send_request(int i, int t){
 int get_response(int i){
     //sem_wait(&sem_resp);
     int fd2;
-    //printf("i: %d\npriv_fifo: %s\n",i, priv_fifos[i]);
     while ((fd2 = open(priv_fifos[i],O_RDONLY))< 0);
     //i t pid tid res
     return 0;
