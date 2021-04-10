@@ -272,6 +272,7 @@ int main(int argc, char**argv){
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
     
+    register_op(0,0,-1, GAVUP);
 	pthread_exit(NULL);	// here, not really necessary...
     return 0;
 
