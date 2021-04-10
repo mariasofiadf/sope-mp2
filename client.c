@@ -8,9 +8,8 @@
 #include <sys/stat.h> 
 #include <string.h>
 #include <semaphore.h>
-#define NTHREADS 10
 
-#define MILLION 1000000
+#define MILLION 2000000
 
 char * public_fifo;
 //priv_fifos array will be dynamically allocated based on expected number of threads
@@ -21,7 +20,7 @@ int nsecs;
 
 int task_count = 0;
 
-sem_t sem_req, sem_resp;
+sem_t sem, sem_time;
 
 /**
  * @brief Structure to be using to communicate via FIFOs
@@ -68,6 +67,7 @@ int load_args(int argc, char** argv){
     }
 
     nsecs = atoi(argv[2]);
+
     time_end = time(NULL) + (time_t) nsecs;
     public_fifo = malloc(sizeof(argv[3]));
     public_fifo = argv[3];
@@ -179,10 +179,8 @@ void send_request(int i, int t){
 
 int get_response(int i){
 
-    //Pauses until dispatcher thread calls it;
     //sem_wait(&sem_req);
 
-    //printf("get resp\n");
     //waits for fifo to be opened on the other end
     int fd2;
 
@@ -207,10 +205,10 @@ int get_response(int i){
 
 
 void *task_request(void *a) {
-    sem_wait(&sem_req);
+    sem_wait(&sem);
     int id = task_count;
     task_count++;
-    //printf("id: %d\n", *id);
+
     int r = rand()%9 + 1;
 
     setup_priv_fifo(id);
@@ -218,28 +216,27 @@ void *task_request(void *a) {
 	send_request(id,r);
 
     while(get_response(id)){
-        printf("get resp\n");
         usleep(50);
     };
 
     delete_priv_fifo(id);
-
-    //usleep(30);
     
-    sem_post(&sem_req);
+    sem_post(&sem);
 	pthread_exit(a);
 }
 
 int time_is_up(){
-    //printf("curr time: %ld\ntime_end: %ld\n", time(NULL), time_end);
+    sem_wait(&sem);
     time_t curr_time = time(NULL);
+    //printf("curr_time: %ld\ttime_end: %ld\n", curr_time, time_end);
+    sem_post(&sem);
     return (curr_time >= time_end);
 }
 
 int main(int argc, char**argv){
 
-    sem_init(&sem_req,0,1);
-    sem_init(&sem_resp,0,1);
+    sem_init(&sem,0,1);
+    sem_init(&sem_time,0,1);
 
     if(load_args(argc,argv))
         return 1;
@@ -253,23 +250,24 @@ int main(int argc, char**argv){
     ids = (pthread_t*)malloc(nsecs*MILLION*sizeof(pthread_t));
     priv_fifos = (char**)malloc(nsecs*MILLION*sizeof(char[30]));
 
+
 	// new threads creation
     while(!time_is_up()){
         if(server_is_open()){
-            if (pthread_create(&ids[i], NULL, task_request, NULL) != 0)
-                exit(-1);	// here, we decided to end process
+            //ignoring possible errors in thread creation
+            int pt = pthread_create(&ids[i], NULL, task_request, NULL);
             i++;
+            usleep(rand()%50+50);
         }
         else{
             register_op(0,0,-1,CLOSD);
-            usleep(50000);
+            sleep(1);
         }
-        //sleep(1);
 	}
+
 	// wait for finishing of created threads
     void *__thread_return;
 	for(int j=0; j < i ; j++) {
-        //printf("j: %d\n", j);
 		pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
