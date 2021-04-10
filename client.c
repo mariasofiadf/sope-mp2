@@ -8,7 +8,7 @@
 #include <sys/stat.h> 
 #include <string.h>
 #include <semaphore.h>
-#define NTHREADS 1
+#define NTHREADS 10
 
 int nsecs;
 char * public_fifo;
@@ -46,8 +46,18 @@ enum oper{
     GAVUP
 };
 
-void register_op(int i, int t, enum oper oper){
-    printf("%ld ; %d ; %d ; %d ; %ld ; %d", time(NULL), i, t, getpid(), pthread_self(), -1);
+/**
+ * @brief Checks if server is open
+ * 
+ * @return int Returns 1 if server is open, 0 otherwise
+ */
+int check_server(){
+    int fd;
+    return(fd = open(public_fifo,O_RDONLY) != -1);
+}
+
+void register_op(int i, int t, int res, enum oper oper){
+    printf("%ld ; %d ; %d ; %d ; %ld ; %d", time(NULL), i, t, getpid(), pthread_self(), res);
     switch (oper)
     {
     case IWANT:
@@ -80,7 +90,7 @@ void delete_priv_fifo(int i){
 }
 
 void send_request(int i, int t){
-    register_op(i, t, IWANT);
+    register_op(i, t, -1, IWANT);
     sem_wait(&sem_req);
     int fd;
     int debug = open("debug", O_WRONLY | O_APPEND);
@@ -106,10 +116,10 @@ int get_response(int i){
     int fd2;
     while ((fd2 = open(priv_fifos[i],O_RDONLY))< 0);
     //i t pid tid res
-    return 0;
     struct message msg;
     read(fd2, &msg, sizeof(msg));
     close(fd2);
+    register_op(i,msg.tskload,msg.tskres,GOTRS);
     //sem_post(&sem_resp);
     return 1;
 }
