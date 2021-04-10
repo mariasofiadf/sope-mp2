@@ -270,7 +270,6 @@ void *producer_thread(void *a) {
 int time_is_up(){
     sem_wait(&sem);
     time_t curr_time = time(NULL);
-    //printf("curr_time: %ld\ttime_end: %ld\n", curr_time, time_end);
     sem_post(&sem);
     return (curr_time >= time_end);
 }
