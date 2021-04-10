@@ -244,12 +244,13 @@ int get_response(int i){
 void *producer_thread(void *a) {
     //waits to enter
     sem_wait(&sem);
-
+    
     //gets unniversal request number
     int id = task_count++;
 
     //generates random task weight
     int r = rand()%9 + 1;
+
 
     setup_priv_fifo(id);
 
@@ -313,10 +314,10 @@ int main(int argc, char**argv){
         }
         else{
             register_op(0,0,-1,CLOSD);
-            sleep(1);
+            usleep(MILLION/2);
         }
 	}
-
+    
 	// wait for finishing of created threads
     void *__thread_return;
 	for(int j=0; j < i ; j++) {
