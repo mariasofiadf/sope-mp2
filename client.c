@@ -267,6 +267,11 @@ void *producer_thread(void *a) {
 	pthread_exit(a);
 }
 
+/**
+ * @brief Checks if time is up
+ * 
+ * @return int Returns 1 if time is up, 0 otherwise
+ */
 int time_is_up(){
     sem_wait(&sem);
     time_t curr_time = time(NULL);
@@ -274,6 +279,13 @@ int time_is_up(){
     return (curr_time >= time_end);
 }
 
+/**
+ * @brief Main
+ * 
+ * @param argc 
+ * @param argv 
+ * @return int Returns 0 uppon success, non-zero otherwise
+ */
 int main(int argc, char**argv){
 
     sem_init(&sem,0,1);
