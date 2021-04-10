@@ -10,9 +10,9 @@
 #include <semaphore.h>
 #define NTHREADS 10
 
-int nsecs;
 char * public_fifo;
 char * priv_fifos[NTHREADS];
+time_t time_end;
 
 sem_t sem_req, sem_resp;
 
@@ -60,8 +60,8 @@ int load_args(int argc, char** argv){
         return 1;
     }
 
-    nsecs = atoi(argv[1]);
-
+    int nsecs = atoi(argv[2]);
+    time_end = time(NULL) + (time_t) nsecs;
     public_fifo = malloc(sizeof(argv[3]));
     public_fifo = argv[3];
 
@@ -207,6 +207,12 @@ void *task_request(void *a) {
 	pthread_exit(a);
 }
 
+int time_is_up(){
+    //printf("curr time: %ld\ntime_end: %ld\n", time(NULL), time_end);
+    time_t curr_time = time(NULL);
+    return (curr_time >= time_end);
+}
+
 int main(int argc, char**argv){
 
     sem_init(&sem_req,0,1);
@@ -217,29 +223,35 @@ int main(int argc, char**argv){
 
     srand(time(NULL));   // Initialization of random function, should only be called once.
 
-    int i;	// thread counter
-	pthread_t ids[NTHREADS];	// storage of (system) Thread Identifiers
+	setbuf(stdout,NULL); //For debug purposes
 
+
+    int i = 0;	// thread counter
+	pthread_t * ids;	// storage of (system) Thread Identifiers
+    ids = (pthread_t*)malloc(i*sizeof(pthread_t));
 	// new threads creation
-	for(i=0; i<NTHREADS; i++) {
+    while(!time_is_up()){
         if(server_is_open()){
+            ids = (pthread_t*)malloc(i*sizeof(pthread_t));
             if (pthread_create(&ids[i], NULL, task_request, &i) != 0)
                 exit(-1);	// here, we decided to end process
-            usleep(20);
+            i++;
+            usleep(rand()%50);
         }
         else{
             register_op(0,0,-1,CLOSD);
-            sleep(1);
+            usleep(50000);
         }
+        if(i >= NTHREADS) break;
 	}
 	// wait for finishing of created threads
-    /*void *__thread_return;
-	for(i=0; i<NTHREADS; i++) {
-		pthread_join(ids[i], &__thread_return);	// Note: threads give no termination code
+    void *__thread_return;
+	for(int j=0; j <= i ; j++) {
+        //printf("j: %d\n", j);
+		pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
-    */
-
+    
 	pthread_exit(NULL);	// here, not really necessary...
     return 0;
 
