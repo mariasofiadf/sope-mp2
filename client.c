@@ -25,6 +25,13 @@ char * public_fifo;
 char ** priv_fifos;
 
 /**
+ * @brief dynamically allocated based on expected number of threads
+ * 
+ */
+int * fds;
+
+
+/**
  * @brief time at which the main thread will stop creating producing threads
  * 
  * @see time_is_up
@@ -188,8 +195,8 @@ void delete_priv_fifo(int i){
 void send_request(int i, int t){
 
     //waits for fifo to be opened on the other end
-    int fd;
-    while((fd = open(public_fifo, O_WRONLY)) < 0);
+
+    while((fds[i] = open(public_fifo, O_WRONLY)) < 0);
 
     //message struct is created and filled with info to be sent
     struct message msg;
@@ -200,8 +207,8 @@ void send_request(int i, int t){
     msg.tskres = -1;
 
     //message is sent and this end of the fifo is closed
-    write(fd, &msg, sizeof(msg));
-    close(fd);
+    write(fds[i], &msg, sizeof(msg));
+    close(fds[i]);
 
 }
 
@@ -215,20 +222,19 @@ void send_request(int i, int t){
 int get_response(int i){
 
     //waits for fifo to be opened on the other end
-    int fd2;
-    while ((fd2 = open(priv_fifos[i],O_RDONLY))< 0);
+    while ((fds[i] = open(priv_fifos[i],O_RDONLY))< 0);
 
     //message struct is created and filled with the information received
     struct message msg;
-    int r = read(fd2, &msg, sizeof(msg));
+    int r = read(fds[i], &msg, sizeof(msg));
     if(r == 0){
         fprintf(stderr, "Error: EOF\n");
-        close(fd2);
+        close(fds[i]);
         return 1;
     }
 
     //this end of the fifo is closed
-    close(fd2);
+    close(fds[i]);
 
     register_op(i,msg.tskload,msg.tskres,GOTRS);
 
@@ -308,6 +314,7 @@ int main(int argc, char**argv){
 	pthread_t * ids;	// storage of (system) Thread Identifiers
     ids = (pthread_t*)malloc(nsecs*MILLION*sizeof(pthread_t));
     priv_fifos = (char**)malloc(nsecs*MILLION*sizeof(char[30]));
+    fds = (int*)malloc(nsecs*MILLION*sizeof(int));
 
 
 	// new threads creation
@@ -318,10 +325,12 @@ int main(int argc, char**argv){
         usleep(rand()%50+50);
 	}
     
+
 	// wait for finishing of created threads
     void *__thread_return;
 	for(int j=0; j < i ; j++) {
-		pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
+        pthread_cancel(ids[j]);
+		//pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
     
