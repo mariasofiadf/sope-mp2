@@ -2,3 +2,5 @@ c
 s
 t
 doc
+*.txt
+script.sh
