@@ -221,18 +221,20 @@ void send_request(int i, int t){
  */
 int get_response(int i){
 
+    //printf("Waiting for fifo %s to be opened on the other end\n", priv_fifos[i]);
     //waits for fifo to be opened on the other end
-    while ((fds[i] = open(priv_fifos[i],O_RDONLY))< 0);
-
+    fds[i] = open(priv_fifos[i], O_RDONLY | O_NDELAY);
+    
+    //printf("Opened fifo\n");
     //message struct is created and filled with the information received
     struct message msg;
-    int r = read(fds[i], &msg, sizeof(msg));
-    if(r == 0){
-        fprintf(stderr, "Error: EOF\n");
-        close(fds[i]);
-        return 1;
-    }
-
+    int r; int eof_count = 0;
+    while((r = read(fds[i], &msg, sizeof(msg))) <= 0 && eof_count < 100){
+        usleep(5000);
+        if(r==0)
+            eof_count ++;
+    };
+        
     //this end of the fifo is closed
     close(fds[i]);
 
@@ -240,6 +242,21 @@ int get_response(int i){
 
     return 0;
 }
+
+/**
+ * @brief Closes all file directories
+ * 
+ */
+void close_all_fds(){
+    for(int i = 0; i < task_count; i++)
+    {
+        //if(priv_fifos[i] == NULL) continue;
+        if((fds[i] = open(priv_fifos[i], O_WRONLY | O_NDELAY)) == -1){
+            close(fds[i]);
+        }
+    }
+}
+
 
 /**
  * @brief Thread function
@@ -270,7 +287,7 @@ void *producer_thread(void *a) {
         delete_priv_fifo(id);
     }
     else{
-        register_op(0,0,-1,CLOSD);
+        register_op(id,t,-1,CLOSD);
         usleep(MILLION/2);
     }
     
@@ -290,6 +307,16 @@ int time_is_up(){
     time_t curr_time = time(NULL);
     sem_post(&sem);
     return (curr_time >= time_end);
+}
+
+void *watcher_thread(void *x){
+    while(!time_is_up()){
+        if(!server_is_open())
+            close_all_fds();
+    }
+    close_all_fds();
+    printf("Watcher thread leaving\n");
+    pthread_exit(x);
 }
 
 /**
@@ -317,20 +344,22 @@ int main(int argc, char**argv){
     fds = (int*)malloc(nsecs*MILLION*sizeof(int));
 
 
+    pthread_create(&ids[i], NULL, watcher_thread, NULL);
+    i++;
+
 	// new threads creation
     while(!time_is_up()){
         //ignoring possible errors in thread creation
         pthread_create(&ids[i], NULL, producer_thread, NULL);
         i++;
         usleep(rand()%50+50);
-	}
+    }
     
-
+    close_all_fds();
 	// wait for finishing of created threads
     void *__thread_return;
 	for(int j=0; j < i ; j++) {
-        pthread_cancel(ids[j]);
-		//pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
+		pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
     
