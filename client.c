@@ -203,7 +203,6 @@ void send_request(int i, int t){
     write(fd, &msg, sizeof(msg));
     close(fd);
 
-    register_op(i, t, -1, IWANT);
 }
 
 /**
@@ -249,18 +248,25 @@ void *producer_thread(void *a) {
     int id = task_count++;
 
     //generates random task weight
-    int r = rand()%9 + 1;
+    int t = rand()%9 + 1;
 
+    register_op(id, t, -1, IWANT);
 
-    setup_priv_fifo(id);
+    if(server_is_open()){
+        setup_priv_fifo(id);
 
-	send_request(id,r);
+	    send_request(id,t);
 
-    while(get_response(id)){
-        usleep(50);
-    };
-
-    delete_priv_fifo(id);
+        while(get_response(id)){
+            usleep(50);
+        }
+        
+        delete_priv_fifo(id);
+    }
+    else{
+        register_op(0,0,-1,CLOSD);
+        usleep(MILLION/2);
+    }
     
     //wakes up next thread
     sem_post(&sem);
@@ -306,16 +312,10 @@ int main(int argc, char**argv){
 
 	// new threads creation
     while(!time_is_up()){
-        if(server_is_open()){
-            //ignoring possible errors in thread creation
-            pthread_create(&ids[i], NULL, producer_thread, NULL);
-            i++;
-            usleep(rand()%50+50);
-        }
-        else{
-            register_op(0,0,-1,CLOSD);
-            usleep(MILLION/2);
-        }
+        //ignoring possible errors in thread creation
+        pthread_create(&ids[i], NULL, producer_thread, NULL);
+        i++;
+        usleep(rand()%50+50);
 	}
     
 	// wait for finishing of created threads
