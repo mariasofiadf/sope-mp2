@@ -157,6 +157,17 @@ void register_op(int i, int t, int res, enum oper oper){
     }
 }
 
+
+/**
+ * @brief Checks if time is up
+ * 
+ * @return int Returns 1 if time is up, 0 otherwise
+ */
+int time_is_up(){
+    time_t curr_time = time(NULL);
+    return (curr_time >= time_end);
+}
+
 /**
  * @brief Set up private fifo in "/tmp/pid.tid"
  * 
@@ -219,7 +230,7 @@ void send_request(int i, int t){
  * @see priv_fifos
  * @return int Returns 0 if successful, 1 othewise
  */
-int get_response(int i){
+int get_response(int i, int t){
 
     //printf("Waiting for fifo %s to be opened on the other end\n", priv_fifos[i]);
     //waits for fifo to be opened on the other end
@@ -228,8 +239,15 @@ int get_response(int i){
     //printf("Opened fifo\n");
     //message struct is created and filled with the information received
     struct message msg;
+    int EOF_LIMIT = 100;
     int r; int eof_count = 0;
-    while((r = read(fds[i], &msg, sizeof(msg))) <= 0 && eof_count < 100){
+    while((r = read(fds[i], &msg, sizeof(msg))) <= 0 && eof_count < EOF_LIMIT){
+        if(time_is_up())
+        {
+            register_op(i,t,-1, GAVUP);
+            close(fds[i]);
+            return 1;
+        }
         usleep(5000);
         if(r==0)
             eof_count ++;
@@ -238,7 +256,12 @@ int get_response(int i){
     //this end of the fifo is closed
     close(fds[i]);
 
-    register_op(i,msg.tskload,msg.tskres,GOTRS);
+    if(eof_count < EOF_LIMIT){
+        register_op(i,msg.tskload,msg.tskres,GOTRS);
+    }
+    else{
+        register_op(i,t,-1, CLOSD);
+    }
 
     return 0;
 }
@@ -280,9 +303,7 @@ void *producer_thread(void *a) {
 
 	    send_request(id,t);
 
-        while(get_response(id)){
-            usleep(50);
-        }
+        get_response(id, t);
         
         delete_priv_fifo(id);
     }
@@ -297,17 +318,7 @@ void *producer_thread(void *a) {
 	pthread_exit(a);
 }
 
-/**
- * @brief Checks if time is up
- * 
- * @return int Returns 1 if time is up, 0 otherwise
- */
-int time_is_up(){
-    sem_wait(&sem);
-    time_t curr_time = time(NULL);
-    sem_post(&sem);
-    return (curr_time >= time_end);
-}
+
 
 void *watcher_thread(void *x){
     while(!time_is_up()){
@@ -315,7 +326,6 @@ void *watcher_thread(void *x){
             close_all_fds();
     }
     close_all_fds();
-    printf("Watcher thread leaving\n");
     pthread_exit(x);
 }
 
@@ -344,15 +354,21 @@ int main(int argc, char**argv){
     fds = (int*)malloc(nsecs*MILLION*sizeof(int));
 
 
-    pthread_create(&ids[i], NULL, watcher_thread, NULL);
-    i++;
-
+    //pthread_create(&ids[i], NULL, watcher_thread, NULL);
+    //i++;
+    int over = 0;
 	// new threads creation
-    while(!time_is_up()){
+    while(!over){
+        
         //ignoring possible errors in thread creation
         pthread_create(&ids[i], NULL, producer_thread, NULL);
         i++;
         usleep(rand()%50+50);
+        
+
+        sem_wait(&sem);
+        over = time_is_up();
+        sem_post(&sem);
     }
     
     close_all_fds();
@@ -362,8 +378,7 @@ int main(int argc, char**argv){
 		pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
-    
-    register_op(0,0,-1, GAVUP);
+
 	pthread_exit(NULL);	// here, not really necessary...
     return 0;
 
