@@ -310,6 +310,11 @@ void *producer_thread(void *a) {
     else{
         register_op(id,t,-1,CLOSD);
         usleep(MILLION/2);
+        while(!server_is_open()){
+            usleep(500);
+            if(time_is_up())
+                break;
+        }
     }
     
     //wakes up next thread
