@@ -60,7 +60,7 @@ sem_t sem;
  * @brief Structure to be using to communicate via FIFOs
  * 
  */
-struct message {
+struct msg {
     /** @brief request id */
 	int rid;	    
     /** @brief process id */
@@ -72,7 +72,9 @@ struct message {
     /** @brief task result */
 	int tskres;	    
 };
-
+/*
+struct msg { int i; int t; pid_t pid; pthread_t tid; int res; };
+*/
 /**
  * @brief Possible operations done by Client
  * 
@@ -124,7 +126,7 @@ int load_args(int argc, char** argv){
  * 
  * @return int Returns 1 if server is open, 0 otherwise
  */
-int server_is_open(){
+int public_fifo_exists(){
     return(access(public_fifo, O_RDONLY) == 0);
 }
 
@@ -207,20 +209,23 @@ void send_request(int i, int t){
 
     //waits for fifo to be opened on the other end
 
-    while((fds[i] = open(public_fifo, O_WRONLY)) < 0);
+    printf("Waiting for public fifo\n");
+    while((fds[i] = open(public_fifo, O_WRONLY | O_NDELAY)) < 0);
 
     //message struct is created and filled with info to be sent
-    struct message msg;
+    struct msg msg;
     msg.rid = i;
     msg.tskload = t;
     msg.pid = getpid();
     msg.tid = pthread_self();
     msg.tskres = -1;
 
+
     //message is sent and this end of the fifo is closed
     write(fds[i], &msg, sizeof(msg));
     close(fds[i]);
 
+    register_op(i, t, -1, IWANT);
 }
 
 /**
@@ -232,13 +237,14 @@ void send_request(int i, int t){
  */
 int get_response(int i, int t){
 
-    //printf("Waiting for fifo %s to be opened on the other end\n", priv_fifos[i]);
+    printf("Waiting for fifo %s to be opened on the other end\n", priv_fifos[i]);
     //waits for fifo to be opened on the other end
+
     fds[i] = open(priv_fifos[i], O_RDONLY | O_NDELAY);
     
     //printf("Opened fifo\n");
     //message struct is created and filled with the information received
-    struct message msg;
+    struct msg msg;
     int EOF_LIMIT = 100;
     int r; int eof_count = 0;
     while((r = read(fds[i], &msg, sizeof(msg))) <= 0 && eof_count < EOF_LIMIT){
@@ -259,8 +265,8 @@ int get_response(int i, int t){
     if(eof_count < EOF_LIMIT){
         register_op(i,msg.tskload,msg.tskres,GOTRS);
     }
-    else{
-        register_op(i,t,-1, CLOSD);
+    else if (msg.tskres == -1){
+        register_op(msg.rid,msg.tskload,msg.tskres, CLOSD);
     }
 
     return 0;
@@ -296,18 +302,18 @@ void *producer_thread(void *a) {
     //generates random task weight
     int t = rand()%9 + 1;
 
-    register_op(id, t, -1, IWANT);
+    if(public_fifo_exists()){
 
-    if(server_is_open()){
         setup_priv_fifo(id);
 
-	    send_request(id,t);
+        send_request(id,t);
 
         get_response(id, t);
         
         delete_priv_fifo(id);
     }
-    else{
+    
+    /*else{
         register_op(id,t,-1,CLOSD);
         usleep(MILLION/2);
         while(!server_is_open()){
@@ -316,23 +322,13 @@ void *producer_thread(void *a) {
                 break;
         }
     }
-    
+    */
     //wakes up next thread
     sem_post(&sem);
 
 	pthread_exit(a);
 }
 
-
-
-void *watcher_thread(void *x){
-    while(!time_is_up()){
-        if(!server_is_open())
-            close_all_fds();
-    }
-    close_all_fds();
-    pthread_exit(x);
-}
 
 /**
  * @brief Main
