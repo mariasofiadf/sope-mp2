@@ -247,8 +247,11 @@ int get_response(int i, int t, char* priv_fifo){
  */
 void *producer_thread(void *a) {
 
+    sem_wait(&sem);
     //gets unniversal request number
     int i = task_count++;
+
+    sem_post(&sem);
 
     //generates random task weight
     int t = rand()%9 + 1;
@@ -293,18 +296,21 @@ int main(int argc, char**argv){
 
 	setbuf(stdout,NULL); //For debug purposes
 
-	pthread_t * ids;	// storage of (system) Thread Identifiers
+	pthread_t * ids;	// storage of (system) Thread Identifiers on resizable array
 
-    ids = (pthread_t*)malloc(nsecs*60*sizeof(pthread_t));
 
+    int i = 0; //thread counter
+    ids = (pthread_t*)malloc((i+1)*sizeof(pthread_t));
+    
     int over = 0;
-
 	// new threads creation
     while(!over){
         
         //ignoring possible errors in thread creation
         if (public_fifo_exists()){
-            pthread_create(&ids[task_count], NULL, producer_thread, NULL);
+            pthread_create(&ids[i], NULL, producer_thread, NULL);
+            i++;
+            ids = realloc(ids, ((i)+1)*sizeof(pthread_t));
         }
         usleep(rand()%50+50);
         
@@ -322,6 +328,7 @@ int main(int argc, char**argv){
 		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
     
+    free(ids);
     return 0;
 
 }
