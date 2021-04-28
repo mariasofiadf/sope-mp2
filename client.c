@@ -20,22 +20,6 @@ char * public_fifo;
 
 
 /**
- * @brief Storage of private fifos' names
- * 
- * @note Dynamically allocated based on expected number of threads
- * 
- */
-char ** priv_fifos;
-
-/**
- * @brief Storage of file descriptors for the private fifos. 
- * 
- * @note Dynamically allocated based on expected number of threads
- * 
- */
-int * fds;
-
-/**
  * @brief Storage of file descriptor for the public fifo 
  * 
  */
@@ -174,11 +158,10 @@ int time_is_up(){
  * 
  * @note this function allocates memory for every new fifo
  */
-void setup_priv_fifo(int i){
+void setup_priv_fifo(char*priv_fifo){
     sem_wait(&sem);
-    priv_fifos[i] = malloc(30);
-    sprintf(priv_fifos[i], "/tmp/%d.%ld", getpid(), pthread_self());
-    mkfifo(priv_fifos[i], 0666);
+    sprintf(priv_fifo, "/tmp/%d.%ld", getpid(), pthread_self());
+    mkfifo(priv_fifo, 0666);
     sem_post(&sem);
 }
 
@@ -188,9 +171,9 @@ void setup_priv_fifo(int i){
  * @param i universal unique request number
  * 
  */
-void delete_priv_fifo(int i){
+void delete_priv_fifo(char*priv_fifo){
     sem_wait(&sem);
-    remove(priv_fifos[i]);
+    remove(priv_fifo);
     sem_post(&sem);
 }
 
@@ -232,19 +215,19 @@ void send_request(int i, int t){
  * @see priv_fifos
  * @return int Returns 0 if successful, 1 othewise
  */
-int get_response(int i, int t){
+int get_response(int i, int t, char* priv_fifo){
     sem_wait(&sem);
     
     //waits for fifo to be opened on the other end
-    fds[i] = open(priv_fifos[i], O_RDONLY);
+    int fd = open(priv_fifo, O_RDONLY);
 
     //message struct is created and filled with the information received
     Message msg;
     
-    read(fds[i], &msg, sizeof(msg));
+    read(fd, &msg, sizeof(msg));
 
     //this end of the fifo is closed
-    close(fds[i]);
+    close(fd);
 
     if (msg.tskres == -1){
         register_op(msg.rid,msg.tskload,msg.tskres, CLOSD);
@@ -270,7 +253,9 @@ void *producer_thread(void *a) {
     //generates random task weight
     int t = rand()%9 + 1;
 
-    setup_priv_fifo(i);
+    char priv_fifo[30];
+
+    setup_priv_fifo(priv_fifo);
 
     send_request(i,t);
 
@@ -279,10 +264,10 @@ void *producer_thread(void *a) {
         register_op(i,t,-1, GAVUP);
         sem_post(&sem);
     }else{
-        get_response(i, t);
+        get_response(i, t, priv_fifo);
     }   
         
-    delete_priv_fifo(i);
+    delete_priv_fifo(priv_fifo);
     
     //wakes up next thread
 
@@ -310,9 +295,7 @@ int main(int argc, char**argv){
 
 	pthread_t * ids;	// storage of (system) Thread Identifiers
 
-    ids = (pthread_t*)malloc(nsecs*MILLION*sizeof(pthread_t));
-    priv_fifos = (char**)malloc(nsecs*MILLION*sizeof(char[30]));
-    fds = (int*)malloc(nsecs*MILLION*sizeof(int));
+    ids = (pthread_t*)malloc(nsecs*60*sizeof(pthread_t));
 
     int over = 0;
 
