@@ -8,7 +8,7 @@
 #include <sys/stat.h> 
 #include <string.h>
 #include <semaphore.h>
-#include "common.h"
+#include "./common.h"
 
 #define MILLION 1000000
 
@@ -20,17 +20,26 @@ char * public_fifo;
 
 
 /**
- * @brief dynamically allocated based on expected number of threads
+ * @brief Storage of private fifos' names
+ * 
+ * @note Dynamically allocated based on expected number of threads
  * 
  */
 char ** priv_fifos;
 
 /**
- * @brief dynamically allocated based on expected number of threads
+ * @brief Storage of file descriptors for the private fifos. 
+ * 
+ * @note Dynamically allocated based on expected number of threads
  * 
  */
 int * fds;
 
+/**
+ * @brief Storage of file descriptor for the public fifo 
+ * 
+ */
+int public_fifo_fd;
 
 /**
  * @brief time at which the main thread will stop creating producing threads
@@ -166,9 +175,11 @@ int time_is_up(){
  * @note this function allocates memory for every new fifo
  */
 void setup_priv_fifo(int i){
+    sem_wait(&sem);
     priv_fifos[i] = malloc(30);
     sprintf(priv_fifos[i], "/tmp/%d.%ld", getpid(), pthread_self());
     mkfifo(priv_fifos[i], 0666);
+    sem_post(&sem);
 }
 
 /**
@@ -178,7 +189,9 @@ void setup_priv_fifo(int i){
  * 
  */
 void delete_priv_fifo(int i){
+    //sem_wait(&sem);
     remove(priv_fifos[i]);
+    //sem_post(&sem);
 }
 
 /**
@@ -192,12 +205,7 @@ void delete_priv_fifo(int i){
  * @returns Returns 0 uppon success, 1 otherwise
  */
 void send_request(int i, int t){
-
-
-    //printf("Waiting for public fifo to be opened on the other end: \t");
-    //waits for fifo to be opened on the other end
-    fds[i] = open(public_fifo, O_WRONLY);
-    //printf("Opened\n");
+    sem_wait(&sem);
 
     //message struct is created and filled with info to be sent
     Message msg;
@@ -208,10 +216,11 @@ void send_request(int i, int t){
     msg.tskres = -1;
 
     //message is sent and this end of the fifo is closed
-    write(fds[i], &msg, sizeof(msg));
-    close(fds[i]);
+    write(public_fifo_fd, &msg, sizeof(msg));
 
     register_op(i, t, -1, IWANT);
+
+    sem_post(&sem);
 }
 
 /**
@@ -222,6 +231,7 @@ void send_request(int i, int t){
  * @return int Returns 0 if successful, 1 othewise
  */
 int get_response(int i, int t){
+    sem_wait(&sem);
     
     //waits for fifo to be opened on the other end
     fds[i] = open(priv_fifos[i], O_RDONLY);
@@ -236,11 +246,12 @@ int get_response(int i, int t){
 
     if (msg.tskres == -1){
         register_op(msg.rid,msg.tskload,msg.tskres, CLOSD);
-    }
-    else{
+    } else {
         register_op(i,msg.tskload,msg.tskres,GOTRS);
     }
     
+    sem_post(&sem);
+
     return 0;
 }
 
@@ -250,29 +261,30 @@ int get_response(int i, int t){
  * @param a 
  */
 void *producer_thread(void *a) {
-    //waits to enter
-    sem_wait(&sem);
-    
+
     //gets unniversal request number
-    int id = task_count++;
+    int i = task_count++;
 
     //generates random task weight
     int t = rand()%9 + 1;
 
-    setup_priv_fifo(id);
+    setup_priv_fifo(i);
 
-    send_request(id,t);
+    send_request(i,t);
 
-    if(time_is_up())
-        register_op(id,t,-1, GAVUP);
-    else{   
-        get_response(id, t);
-    }
+    
+    if(time_is_up()){
+        sem_wait(&sem);
+        register_op(i,t,-1, GAVUP);
+        sem_post(&sem);
+    }else{
+        get_response(i, t);
+    }   
         
-    delete_priv_fifo(id);
+    delete_priv_fifo(i);
     
     //wakes up next thread
-    sem_post(&sem);
+
 
 	pthread_exit(a);
 }
@@ -296,21 +308,22 @@ int main(int argc, char**argv){
 
 	setbuf(stdout,NULL); //For debug purposes
 
-    //int i = 0;	// thread counter
 	pthread_t * ids;	// storage of (system) Thread Identifiers
+
     ids = (pthread_t*)malloc(nsecs*MILLION*sizeof(pthread_t));
     priv_fifos = (char**)malloc(nsecs*MILLION*sizeof(char[30]));
     fds = (int*)malloc(nsecs*MILLION*sizeof(int));
 
-    //i++;
     int over = 0;
+
+    public_fifo_fd = open(public_fifo, O_WRONLY);
+
 	// new threads creation
     while(!over){
         
         //ignoring possible errors in thread creation
         if (public_fifo_exists()){
             pthread_create(&ids[task_count], NULL, producer_thread, NULL);
-            //i++;
         }
         usleep(rand()%50+50);
         
@@ -318,7 +331,8 @@ int main(int argc, char**argv){
         over = time_is_up();
         sem_post(&sem);
     }
-    
+
+    close(public_fifo_fd);
 
 	// wait for finishing of created threads
     void *__thread_return;
