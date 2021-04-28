@@ -189,9 +189,9 @@ void setup_priv_fifo(int i){
  * 
  */
 void delete_priv_fifo(int i){
-    //sem_wait(&sem);
+    sem_wait(&sem);
     remove(priv_fifos[i]);
-    //sem_post(&sem);
+    sem_post(&sem);
 }
 
 /**
@@ -206,6 +206,8 @@ void delete_priv_fifo(int i){
  */
 void send_request(int i, int t){
     sem_wait(&sem);
+
+    public_fifo_fd = open(public_fifo, O_WRONLY);
 
     //message struct is created and filled with info to be sent
     Message msg;
@@ -272,7 +274,6 @@ void *producer_thread(void *a) {
 
     send_request(i,t);
 
-    
     if(time_is_up()){
         sem_wait(&sem);
         register_op(i,t,-1, GAVUP);
@@ -284,7 +285,6 @@ void *producer_thread(void *a) {
     delete_priv_fifo(i);
     
     //wakes up next thread
-
 
 	pthread_exit(a);
 }
@@ -315,8 +315,6 @@ int main(int argc, char**argv){
     fds = (int*)malloc(nsecs*MILLION*sizeof(int));
 
     int over = 0;
-
-    public_fifo_fd = open(public_fifo, O_WRONLY);
 
 	// new threads creation
     while(!over){
