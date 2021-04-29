@@ -13,8 +13,9 @@
 #define MILLION 1000000
 
 /**
- * @brief dynamically allocated
+ * @brief Public FIFO's path
  * 
+ * @note dynamically allocated
  */
 char * public_fifo;
 
@@ -39,7 +40,7 @@ time_t time_end;
 int nsecs;
 
 /**
- * @brief total number of task requests (producing threads)
+ * @brief total number of task requests (same as number of producing threads)
  * 
  */
 int task_count = 0;
@@ -50,11 +51,8 @@ int task_count = 0;
  */
 sem_t sem;
 
-/*
-struct msg { int i; int t; pid_t pid; pthread_t tid; int res; };
-*/
 /**
- * @brief Possible operations done by Client
+ * @brief Possible operations registered by Client
  * 
  */
 enum oper{
@@ -80,7 +78,7 @@ void print_usage(){
  * @see nsecs
  * @see time_end
  * @see public_fifo
- * @return int Returns 0, if successful and 1 otherwise
+ * @return int Returns 0 if successful and 1 otherwise
  */
 int load_args(int argc, char** argv){
     if(argc != 4 || strcmp(argv[1], "-t")){
@@ -101,7 +99,9 @@ int load_args(int argc, char** argv){
 
 
 /**
- * @brief Checks if server is open
+ * @brief Checks if the FIFO in the path of public_fifo exists
+ * 
+ * @see public_fifo
  * 
  * @return int Returns 1 if server is open, 0 otherwise
  */
@@ -152,11 +152,8 @@ int time_is_up(){
 /**
  * @brief Set up private fifo in "/tmp/pid.tid"
  * 
- * @param i universal unique request number
+ * @param priv_fifo char pointer to be loaded with the private FIFO path name
  * 
- * @see priv_fifos
- * 
- * @note this function allocates memory for every new fifo
  */
 void setup_priv_fifo(char*priv_fifo){
     sem_wait(&sem);
@@ -168,7 +165,7 @@ void setup_priv_fifo(char*priv_fifo){
 /**
  * @brief Deletes a private fifo
  * 
- * @param i universal unique request number
+ * @param priv_fifo char pointer with the private FIFO path name to be deleted
  * 
  */
 void delete_priv_fifo(char*priv_fifo){
@@ -182,8 +179,6 @@ void delete_priv_fifo(char*priv_fifo){
  * 
  * @param i universal unique request number
  * @param t task weight
- * 
- * @note This is a critical zone. Therefore, a semaphore is used to prevent simultaneous access to the public fifo
  * 
  * @returns Returns 0 uppon success, 1 otherwise
  */
@@ -211,8 +206,10 @@ void send_request(int i, int t){
 /**
  * @brief Get the response from the private fifo at index i of priv_fifos
  * 
- * @param i 
- * @see priv_fifos
+ * @param i universal unique request number
+ * @param t task weight
+ * @param priv_fifo char pointer with the private FIFO path name
+ * 
  * @return int Returns 0 if successful, 1 othewise
  */
 int get_response(int i, int t, char* priv_fifo){
@@ -271,8 +268,6 @@ void *producer_thread(void *a) {
     }   
         
     delete_priv_fifo(priv_fifo);
-    
-    //wakes up next thread
 
 	pthread_exit(a);
 }
@@ -292,7 +287,7 @@ int main(int argc, char**argv){
     if(load_args(argc,argv))
         return 1;
 
-    srand(time(NULL));   // Initialization of random function, should only be called once.
+    srand(time(NULL));   // Initialization of random function.
 
 	setbuf(stdout,NULL); //For debug purposes
 
@@ -300,7 +295,7 @@ int main(int argc, char**argv){
 
 
     int i = 0; //thread counter
-    ids = (pthread_t*)malloc((i+1)*sizeof(pthread_t));
+    ids = (pthread_t*)malloc((i+1)*sizeof(pthread_t)); // allocates memory for one thread id
     
     int over = 0;
 	// new threads creation
@@ -310,7 +305,7 @@ int main(int argc, char**argv){
         if (public_fifo_exists()){
             pthread_create(&ids[i], NULL, producer_thread, NULL);
             i++;
-            ids = realloc(ids, ((i)+1)*sizeof(pthread_t));
+            ids = realloc(ids, ((i)+1)*sizeof(pthread_t)); // resizes array ids
         }
         usleep(rand()%50+50);
         
@@ -325,7 +320,6 @@ int main(int argc, char**argv){
     void *__thread_return;
 	for(int j=0; j < task_count ; j++) {
 		pthread_join(ids[j], &__thread_return);	// Note: threads give no termination code
-		//printf("\nTermination of thread %d: %lu.\nTermination value: %d", i, (unsigned long)ids[i], *retVal);
 	}
     
     free(ids);
