@@ -142,8 +142,8 @@ verifySequences() {
 
   if [ "$ID_CLIENT" = "$ID_EXEC_2LATE" ]; then echo "ALL OK"; else echo "ERROR: OPERATIONS EXECUTED DIFFER ON CLIENT vs SERVER"; fi
   if [ "$RES_CLIENT" = "$RES_DONE" ]; then echo "ALL OK"; else echo "ERROR: RESULTS RETURNED DIFFER ON CLIENT vs SERVER"; fi
-  if [ "$RES_CLIENT" = "$RES_EXEC" ]; then echo "ALL OK"; else echo "ERROR: RESULTS RETURNED DIFFER ON CLIENT vs SERVER"; fi
-  if [ "$RES_EXEC" = "$RES_DONE" ]; then echo "ALL OK"; else echo "ERROR: RESULTS RECEIVED DIFFER FROM SENT"; fi
+###25abr  if [ "$RES_CLIENT" = "$RES_EXEC" ]; then echo "ALL OK"; else echo "ERROR: RESULTS RETURNED DIFFER ON CLIENT vs SERVER"; fi
+###25abr  if [ "$RES_EXEC" = "$RES_DONE" ]; then echo "ALL OK"; else echo "ERROR: RESULTS RECEIVED DIFFER FROM SENT"; fi
 }
 
 main "$@"
